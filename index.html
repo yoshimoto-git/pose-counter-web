@@ -8,21 +8,34 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
   <style>
-    body {
+    html, body {
       margin: 0;
+      padding: 0;
       overflow: hidden;
       background: #000;
     }
-    #video, #canvas {
+    #wrapper {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+    video, canvas {
       position: absolute;
       top: 0;
       left: 0;
+      width: 100%;
+      height: 100%;
+    }
+    canvas {
+      pointer-events: none;
     }
   </style>
 </head>
 <body>
-  <video id="video" autoplay playsinline width="360" height="270" style="transform: scaleX(-1);"></video>
-  <canvas id="canvas" width="360" height="270"></canvas>
+  <div id="wrapper">
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
+  </div>
 
   <script>
     let detector, ctx, canvas, video;
@@ -48,28 +61,37 @@
     }
 
     async function detectPose() {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.clearRect(0, 0, canvas.width, canvas.height); // canvasを毎回クリア
+
       const poses = await detector.estimatePoses(video);
       if (poses.length > 0) {
         const kp = poses[0].keypoints;
         const hip = kp.find(p => p.name === "left_hip")?.y || 0;
         const knee = kp.find(p => p.name === "left_knee")?.y || 0;
 
-        // しゃがんだ判定
         if (hip - knee > 60) goingDown = true;
-
-        // 立ち上がったときにカウント
         if (goingDown && knee - hip > 60) {
           count++;
           goingDown = false;
-          if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+          if (window.ReactNativeWebView?.postMessage) {
             window.ReactNativeWebView.postMessage(count.toString());
-            console.log("送信カウント:", count);
           }
+          console.log("カウント:", count);
         }
+
+        // 骨格の一部を描画
+        ctx.fillStyle = "red";
+        kp.forEach((point) => {
+          if (point.score > 0.5) {
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, 6, 0, 2 * Math.PI);
+            ctx.fill();
+          }
+        });
       }
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       requestAnimationFrame(detectPose);
     }
 
