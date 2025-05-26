@@ -7,13 +7,25 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+    }
+    #video, #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+  </style>
 </head>
-<body style="margin:0;overflow:hidden">
-  <!--<video id="video" autoplay playsinline style="display:none"></video>-->
+<body>
   <video id="video" autoplay playsinline width="360" height="270" style="transform: scaleX(-1);"></video>
   <canvas id="canvas" width="360" height="270"></canvas>
+
   <script>
-    let detector, ctx, video, canvas;
+    let detector, ctx, canvas, video;
     let count = 0, goingDown = false;
 
     async function init() {
@@ -21,8 +33,13 @@
       canvas = document.getElementById('canvas');
       ctx = canvas.getContext('2d');
 
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      video.srcObject = stream;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+      } catch (err) {
+        alert("カメラへのアクセスが拒否されました: " + err);
+        return;
+      }
 
       const config = { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING };
       detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, config);
@@ -37,14 +54,21 @@
         const hip = kp.find(p => p.name === "left_hip")?.y || 0;
         const knee = kp.find(p => p.name === "left_knee")?.y || 0;
 
+        // しゃがんだ判定
         if (hip - knee > 60) goingDown = true;
+
+        // 立ち上がったときにカウント
         if (goingDown && knee - hip > 60) {
           count++;
           goingDown = false;
-          window.ReactNativeWebView?.postMessage?.(count.toString());
+          if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+            window.ReactNativeWebView.postMessage(count.toString());
+            console.log("送信カウント:", count);
+          }
         }
       }
 
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       requestAnimationFrame(detectPose);
     }
