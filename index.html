@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Pose Detection</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+</head>
+<body style="margin:0;overflow:hidden">
+  <video id="video" autoplay playsinline style="display:none"></video>
+  <canvas id="canvas" width="360" height="270"></canvas>
+  <script>
+    let detector, ctx, video, canvas;
+    let count = 0, goingDown = false;
+
+    async function init() {
+      video = document.getElementById('video');
+      canvas = document.getElementById('canvas');
+      ctx = canvas.getContext('2d');
+
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+
+      const config = { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING };
+      detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, config);
+
+      video.addEventListener('loadeddata', detectPose);
+    }
+
+    async function detectPose() {
+      const poses = await detector.estimatePoses(video);
+      if (poses.length > 0) {
+        const kp = poses[0].keypoints;
+        const hip = kp.find(p => p.name === "left_hip")?.y || 0;
+        const knee = kp.find(p => p.name === "left_knee")?.y || 0;
+
+        if (hip - knee > 60) goingDown = true;
+        if (goingDown && knee - hip > 60) {
+          count++;
+          goingDown = false;
+          window.ReactNativeWebView?.postMessage?.(count.toString());
+        }
+      }
+
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      requestAnimationFrame(detectPose);
+    }
+
+    init();
+  </script>
+</body>
+</html>
+
